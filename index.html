@@ -9,7 +9,6 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
     rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -813,10 +812,15 @@
     const $ = (s, r = document) => r.querySelector(s);
     const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    /* ===== CONFIG: paste your Supabase values here, or use Database → Connect ===== */
-    let CFG = { url: '', key: '' };
-    try { const c = JSON.parse(localStorage.getItem('lp_cfg') || '{}'); if (c.url && c.key) CFG = c } catch (e) { }
-    const sb = (CFG.url && CFG.key && window.supabase) ? supabase.createClient(CFG.url, CFG.key) : null;
+    /* ===== Database access: every request goes to /api/* (Vercel functions). No keys exist in this file or in the browser. ===== */
+    try { localStorage.removeItem('lp_cfg') } catch (e) { }   // wipes any key saved by the old Connect tab
+    let sb = null, _t = 0, _p = null;
+    const TBL = { ports: 'ports', shipments: 'shipments', shipment_legs: 'legs', cargo_items: 'cargo' };
+    const API = {
+      snap() { if (Date.now() - _t > 1500) { _t = Date.now(); _p = fetch('/api/data').then(async r => { if (!r.ok) { const j = await r.json().catch(() => ({})); const e = new Error(j.error || 'API error ' + r.status); e.status = r.status; throw e } return r.json() }) } return _p },
+      from(t) { const q = { select: () => q, order: () => q, then: (ok, no) => API.snap().then(d => ({ data: d[TBL[t]], error: null })).then(ok, no) }; return q },
+      async rpc(fn, args) { try { const r = await fetch('/api/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn, args }) }); const j = await r.json().catch(() => ({})); return r.ok ? { data: j.data, error: null } : { data: null, error: { message: j.error || 'Request failed' } } } catch (e) { return { data: null, error: { message: e.message } } } }
+    };
 
     /* ===== State & helpers ===== */
     const RATES0 = { USD: 1, EUR: .92, INR: 83.4, GBP: .79, JPY: 151.2 };
@@ -849,7 +853,7 @@
       if (!S.ships.find(x => x.id === S.sel)) S.sel = 1;
     }
     async function load() {
-      if (!sb) { loadDemo(); return }
+      if (!sb) { try { await API.snap(); sb = API } catch (e) { if (e.status && e.status !== 404) S.err = 'Database error: ' + e.message + ' — showing demo data.'; loadDemo(); return } }
       try {
         const [p, sh, lg, cg] = await Promise.all([sb.from('ports').select('*').order('port_code'), sb.from('shipments').select('*').order('id', { ascending: false }), sb.from('shipment_legs').select('*').order('leg_order'), sb.from('cargo_items').select('*')]);
         const e = p.error || sh.error || lg.error || cg.error; if (e) throw e;
@@ -933,8 +937,7 @@
           trigger: `<p class="mut">Fires on every cargo change and keeps <span class="mono">shipments.total_weight_kg</span> and <span class="mono">total_duty_usd</span> consistent.</p><pre>${hl(TRG)}</pre>`,
           log: S.log.length ? S.log.map(l => `<div class="mut mono" style="font-size:11px">${l.t} · ${l.label} · ${l.src}</div><pre>${hl(l.sql)}</pre>`).join('') : '<p class="mut">Use the app (select, filter, create, run analytics) and the SQL appears here.</p>',
           analytics: `<div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center"><button class="btn" data-q="win">Window function</button><button class="btn" data-q="json">JSONB filter</button><button class="btn" data-q="geo">PostGIS radius</button><select id="rad" style="width:auto"><option>500</option><option>1500</option><option>4000</option></select><span class="mut" style="font-size:.78rem">km around selected container</span></div>${S.qSql ? `<pre>${hl(S.qSql)}</pre>` : ''}<div class="scroll">${S.qOut || '<p class="mut">Run a query to see results.</p>'}</div>`,
-          connect: `<p><span class="dot" style="background:${sb ? 'var(--ok)' : 'var(--warn)'}"></span><b>${sb ? 'Connected to Supabase' : 'Demo mode (in-memory data)'}</b></p><p class="mut">Project URL and anon key live in Supabase → Project Settings → API. Stored in this browser only.</p>
-   <label>Project URL</label><input id="cU" placeholder="https://xxxx.supabase.co" value="${esc(CFG.url)}"><label>Anon public key</label><input id="cK" value="${esc(CFG.key)}"><br><br><button id="cS" class="btn">Save &amp; reload</button> <button id="cX" class="btn o">Clear</button>`
+          connect: `<p><span class="dot" style="background:${sb ? 'var(--ok)' : 'var(--warn)'}"></span><b>${sb ? 'Connected to Supabase' : 'Demo mode (in-memory data)'}</b></p><p class="mut">Credentials are stored as environment variables on the server and are never sent to your browser, so there is nothing to enter here.</p>`
         }[S.tab];
         return `<section class="wrap"><div class="kick">Under the hood</div><h1>Database</h1><div class="tabs">${T.map(([k, n]) => `<button data-t="${k}" class="${k === S.tab ? 'on' : ''}">${n}</button>`).join('')}</div>${body}</section>`
       }
@@ -1033,8 +1036,6 @@ create trigger trg_cargo_totals after insert or update or delete
         document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.tab = b.dataset.t; render() });
         document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => runQ(b.dataset.q));
         if ($('#rad')) $('#rad').value = S.rad;
-        if ($('#cS')) $('#cS').onclick = () => { try { localStorage.setItem('lp_cfg', JSON.stringify({ url: $('#cU').value.trim(), key: $('#cK').value.trim() })) } catch (e) { } location.reload() };
-        if ($('#cX')) $('#cX').onclick = () => { try { localStorage.removeItem('lp_cfg') } catch (e) { } location.reload() };
       }
     };
     const NAV = [['', 'Home'], ['shipments', 'Shipments'], ['ports', 'Ports'], ['new', 'New shipment'], ['database', 'Database']];
@@ -1055,4 +1056,3 @@ create trigger trg_cargo_totals after insert or update or delete
 </body>
 
 </html>
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyeXZ5ZmJyZnpsbXF1bHZlbW53Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjMyODczMSwiZXhwIjoyMTA3OTA0NzMxfQ.c9CZkUkpHneFf8xBUJVjuUQZRFYc65ankiG43WKjNv8
