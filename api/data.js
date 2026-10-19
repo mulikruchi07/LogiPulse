@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
   try {
     const [ports, shipments, legs, cargo] = await Promise.all([
       q('ports?select=id,port_code,name,country,lat,lon&order=port_code'),
-      q('shipments?select=*&order=id.desc'),
+      q('shipments?select=id,tracking_code,sender,receiver,status,stage,base_cost_usd,total_weight_kg,total_duty_usd,cur_lat,cur_lon,metadata_jsonb,created_at&order=id.desc'),
       q('shipment_legs?select=*&order=leg_order'),
       q('cargo_items?select=*'),
     ]);

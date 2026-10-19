@@ -794,6 +794,151 @@
         border-color: #999
       }
     }
+
+    /* ===== New visual pages ===== */
+    .chart {
+      background: var(--card);
+      border: 1px solid var(--ink);
+      padding: .6rem
+    }
+
+    .chart svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      min-width: 720px
+    }
+
+    .grat {
+      stroke: var(--rule);
+      stroke-width: 1;
+      fill: none
+    }
+
+    .glab {
+      font: 10px 'IBM Plex Mono', monospace;
+      fill: var(--mut)
+    }
+
+    .lane {
+      fill: none;
+      stroke: var(--ac);
+      stroke-dasharray: 7 5;
+      animation: flow 1.6s linear infinite;
+      opacity: .55;
+      cursor: pointer
+    }
+
+    .lane.on,
+    .lane:hover {
+      opacity: 1;
+      stroke: var(--ink)
+    }
+
+    @keyframes flow {
+      to {
+        stroke-dashoffset: -24
+      }
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: .35
+      }
+    }
+
+    .pt {
+      fill: var(--ink)
+    }
+
+    .ptl {
+      font: 500 11px 'IBM Plex Mono', monospace;
+      fill: var(--ink)
+    }
+
+    .cont {
+      fill: var(--ac2);
+      stroke: var(--bg);
+      stroke-width: 2;
+      animation: blink 1.8s infinite
+    }
+
+    .board {
+      background: var(--ink);
+      color: #f4f1e9;
+      padding: .4rem 1rem 1rem;
+      border: 1px solid var(--ink)
+    }
+
+    .board table {
+      font: 500 12.5px 'IBM Plex Mono', monospace;
+      min-width: 560px
+    }
+
+    .board th {
+      color: #9aa0c8;
+      border-color: #3a3d52
+    }
+
+    .board td {
+      border-color: #2b2e40;
+      color: #f4f1e9
+    }
+
+    .board .amber {
+      color: #ffc857
+    }
+
+    .board .bd-in {
+      color: #7fe0c5
+    }
+
+    .board .bd-out {
+      color: #ffc857
+    }
+
+    .hbar {
+      height: 10px;
+      background: var(--rule)
+    }
+
+    .hbar i {
+      display: block;
+      height: 100%;
+      background: var(--ac)
+    }
+
+    .cl {
+      display: grid;
+      grid-template-columns: 2.2rem minmax(0, 1.3fr) minmax(0, 2fr) auto;
+      gap: 1rem;
+      align-items: center;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--rule)
+    }
+
+    details {
+      margin: 1.4rem 0
+    }
+
+    summary {
+      cursor: pointer;
+      font: 500 11px 'IBM Plex Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--ac)
+    }
+
+    @media(max-width:700px) {
+      .cl {
+        grid-template-columns: 1.6rem minmax(0, 1fr)
+      }
+
+      .cl>:nth-child(3),
+      .cl>:nth-child(4) {
+        grid-column: 1/-1
+      }
+    }
   </style>
 </head>
 
@@ -853,6 +998,7 @@
       if (!S.ships.find(x => x.id === S.sel)) S.sel = 1;
     }
     async function load() {
+      S.lanes = S.clients = S.mf = null;
       if (!sb) { try { await API.snap(); sb = API } catch (e) { if (e.status && e.status !== 404) S.err = 'Database error: ' + e.message + ' — showing demo data.'; loadDemo(); return } }
       try {
         const [p, sh, lg, cg] = await Promise.all([sb.from('ports').select('*').order('port_code'), sb.from('shipments').select('*').order('id', { ascending: false }), sb.from('shipment_legs').select('*').order('leg_order'), sb.from('cargo_items').select('*')]);
@@ -906,6 +1052,7 @@
           return `<div class="card fade"><div class="kick">${s.o} → ${s.d} · ${Number(s.distance_km).toLocaleString()} km</div>
    <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap"><h2>${s.tracking_code}</h2><div style="text-align:right"><span class="tag ${sc(s.status)}">${s.status}</span><div style="font:500 1.5rem Fraunces,serif;margin-top:.3rem">${fmt(s.base_cost_usd)}</div></div></div>
    <p class="mut" style="margin:.2rem 0 0">${esc(s.sender)} → ${esc(s.receiver)}</p>
+   ${s.stage < 4 ? `<button class="btn o" id="adv" style="margin-top:.8rem">${s.status === 'Customs Hold' ? 'Release customs hold' : 'Advance to ' + STAGES[s.stage + 1]}</button><div id="advErr" class="err"></div>` : ''}
    <div class="scroll"><div class="tl">${STAGES.map((n, i) => `<div class="step ${i < s.stage ? 'done' : i === s.stage ? 'cur' : ''}"><i></i>${n}</div>`).join('')}</div></div>
    <div class="grid2" style="margin:1rem 0"><div><div class="kick" style="color:var(--mut)">Origin · ${esc(port(s.o).name)}</div>${wx(s.o)}</div><div><div class="kick" style="color:var(--mut)">Destination · ${esc(port(s.d).name)}</div>${wx(s.d)}</div></div>
    <label>Container load · ${n} × 40ft · ${Number(s.total_weight_kg).toLocaleString()} kg · ${pct}%</label><div class="bar"><i style="width:${pct}%"></i></div>
@@ -931,12 +1078,15 @@
   <div class="card"><div class="kick">Estimated quote</div><div id="est" style="font:500 2.2rem Fraunces,serif"></div><div id="estSub" class="mut" style="font-size:.78rem;margin-bottom:1rem"></div>
    <label>Container fit: <span id="fit"></span></label><div class="bar"><i id="fitBar" style="width:0"></i></div><br><button id="go" class="btn" style="width:100%">Create shipment</button></div></div></section>`},
       database() {
-        const T = [['schema', 'Schema'], ['trigger', 'Trigger'], ['log', 'SQL log'], ['analytics', 'Analytics'], ['connect', 'Connect']];
+        const T = [['schema', 'Schema'], ['trigger', 'Trigger'], ['log', 'SQL log'], ['analytics', 'Analytics'], ['advanced', 'Advanced SQL'], ['connect', 'Connect']];
         const body = {
           schema: `<p class="mut">Condensed view. The complete DDL (constraints, RLS, RPCs, seed) is in <b>schema.sql</b>.</p><pre>${hl(DDL)}</pre>`,
           trigger: `<p class="mut">Fires on every cargo change and keeps <span class="mono">shipments.total_weight_kg</span> and <span class="mono">total_duty_usd</span> consistent.</p><pre>${hl(TRG)}</pre>`,
           log: S.log.length ? S.log.map(l => `<div class="mut mono" style="font-size:11px">${l.t} · ${l.label} · ${l.src}</div><pre>${hl(l.sql)}</pre>`).join('') : '<p class="mut">Use the app (select, filter, create, run analytics) and the SQL appears here.</p>',
-          analytics: `<div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center"><button class="btn" data-q="win">Window function</button><button class="btn" data-q="json">JSONB filter</button><button class="btn" data-q="geo">PostGIS radius</button><select id="rad" style="width:auto"><option>500</option><option>1500</option><option>4000</option></select><span class="mut" style="font-size:.78rem">km around selected container</span></div>${S.qSql ? `<pre>${hl(S.qSql)}</pre>` : ''}<div class="scroll">${S.qOut || '<p class="mut">Run a query to see results.</p>'}</div>`,
+          analytics: `<div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center"><button class="btn" data-q="win">Port ranking</button><button class="btn" data-q="run">Running totals</button><button class="btn" data-q="json">JSONB filter</button><button class="btn" data-q="geo">PostGIS radius</button><select id="rad" style="width:auto"><option>500</option><option>1500</option><option>4000</option></select><span class="mut" style="font-size:.78rem">km around selected container</span></div>
+<div class="grid2" style="margin-top:.8rem"><div style="display:flex;gap:.5rem"><input id="fts" placeholder="Full-text search, e.g. chemie" value="${esc(S.term || '')}"><button class="btn" data-q="fts">Search</button></div><div style="display:flex;gap:.5rem"><select id="expk"><option value="spatial">spatial (GiST)</option><option value="jsonb">jsonb (GIN)</option><option value="search">full-text (GIN)</option><option value="status">status (B-tree)</option></select><button class="btn" data-q="exp">EXPLAIN</button></div></div>
+<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.8rem"><button class="btn o" data-q="mv">Materialized view</button><button class="btn o" data-q="evt">Status events</button><button class="btn o" data-q="aud">Audit log</button></div>${S.qSql ? `<pre>${hl(S.qSql)}</pre>` : ''}<div class="scroll">${S.qOut || '<p class="mut">Run a query to see results.</p>'}</div>`,
+          advanced: `<p class="mut">The advanced objects live in <b>migration_002_advanced.sql</b>. Condensed view:</p><pre>${hl(ADV)}</pre>`,
           connect: `<p><span class="dot" style="background:${sb ? 'var(--ok)' : 'var(--warn)'}"></span><b>${sb ? 'Connected to Supabase' : 'Demo mode (in-memory data)'}</b></p><p class="mut">Credentials are stored as environment variables on the server and are never sent to your browser, so there is nothing to enter here.</p>`
         }[S.tab];
         return `<section class="wrap"><div class="kick">Under the hood</div><h1>Database</h1><div class="tabs">${T.map(([k, n]) => `<button data-t="${k}" class="${k === S.tab ? 'on' : ''}">${n}</button>`).join('')}</div>${body}</section>`
@@ -970,6 +1120,44 @@ end $$ language plpgsql;
 create trigger trg_cargo_totals after insert or update or delete
   on cargo_items for each row execute function recalc_shipment_totals();`;
 
+    /* ===== Extra DBMS features ===== */
+    const DEMO = { ev: {}, audit: [] };
+    const st = x => `${x.status} / ${STAGES[x.stage]}`;
+    const liveRpc = async (fn, a) => { const { data, error } = await sb.rpc(fn, a || {}); if (error) throw error; return data };
+    function demoLog(x, op, note, old) {
+      const t = new Date().toLocaleTimeString(); S.lanes = S.clients = S.mf = null;
+      (DEMO.ev[x.id] = DEMO.ev[x.id] || []).push({ t, from: old ? st(old) : '—', to: st(x), note });
+      DEMO.audit.unshift({ t, op, id: x.id, chg: old ? `${st(old)} → ${st(x)}` : 'row inserted' })
+    }
+    async function advance() {
+      const x = S.ships.find(v => v.id === S.sel); if (!x) return; $('#advErr').textContent = '';
+      logSql('Advance shipment', `select advance_shipment(${x.id});\n-- locks the row (FOR UPDATE), then updates stage/status\n-- trg_shipment_events writes a history row; trg_audit_shipments writes a jsonb audit row`);
+      if (sb) { const { error } = await sb.rpc('advance_shipment', { p_id: x.id }); if (error) return $('#advErr').textContent = error.message; await load() }
+      else { const o = { ...x }; if (x.status === 'Customs Hold') x.status = 'In Transit'; else { x.stage++; if (x.stage >= 4) x.status = 'Delivered' } demoLog(x, 'UPDATE', 'Advanced', o) }
+      render();
+    }
+    const EXPQ = { spatial: `select port_code from ports where st_dwithin(location, <point>, 500000)`, jsonb: `select id from shipments where metadata_jsonb @> '{"hazardous": true}'`, search: `select id from shipments where search @@ websearch_to_tsquery('simple','shanghai')`, status: `select id from shipments where status = 'In Transit'` };
+    const ADV = `-- Triggers on shipments
+create trigger trg_shipment_events after insert or update on shipments
+  for each row execute function log_shipment_change();   -- history rows
+create trigger trg_audit_shipments after insert or update or delete on shipments
+  for each row execute function audit_row();             -- jsonb old/new snapshots
+
+-- Transaction with a row lock (advance_shipment)
+select * into s from shipments where id = p_id for update;
+update shipments set stage = s.stage + 1 where id = p_id;
+
+-- Full-text search: generated tsvector + GIN index
+alter table shipments add column search tsvector generated always as
+  (to_tsvector('simple', tracking_code || ' ' || sender || ' ' || receiver)) stored;
+create index idx_shipments_search on shipments using gin (search);
+
+-- Materialized view, refreshed on demand
+create materialized view mv_port_stats as select p.port_code, count(distinct l.shipment_id) ...;
+refresh materialized view mv_port_stats;
+
+-- Window functions: sum() over, lag(), ntile(4), percent_rank()`;
+
     /* ===== Analytics ===== */
     const tbl = (h, r) => `<table><tr>${h.map(x => `<th>${x}</th>`).join('')}</tr>${r.map(x => `<tr>${x.map(y => `<td>${y}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${h.length}" class="mut">0 rows</td></tr>`}</table>`;
     async function runQ(k) {
@@ -993,6 +1181,43 @@ create trigger trg_cargo_totals after insert or update or delete
           if (sb) { const { data, error } = await sb.rpc('ports_within', { p_lat: s.cur_lat, p_lon: s.cur_lon, p_radius_km: S.rad }); if (error) throw error; rows = data.map(r => [`${r.port_code} · ${esc(r.name)}`, Number(r.dist_km).toLocaleString() + ' km']) }
           else rows = S.ports.map(p => [p, hav(s.cur_lat, s.cur_lon, p.lat, p.lon)]).filter(r => r[1] <= S.rad).sort((a, b) => a[1] - b[1]).map(r => [`${r[0].port_code} · ${esc(r[0].name)}`, Math.round(r[1]).toLocaleString() + ' km'])
         }
+        if (k === 'run') {
+          S.qSql = `select s.tracking_code, o.port_code as origin, s.base_cost_usd,\n  sum(s.total_weight_kg) over (partition by o.port_code order by s.created_at, s.id) as running_kg,\n  lag(s.base_cost_usd) over (order by s.created_at, s.id) as prev_cost,\n  ntile(4) over (order by s.base_cost_usd) as cost_quartile,\n  percent_rank() over (order by s.base_cost_usd) as pct_rank\nfrom shipments s\njoin shipment_legs l on l.shipment_id = s.id and l.leg_order = 1\njoin ports o on o.id = l.origin_port_id\norder by s.created_at, s.id;`; head = ['Tracking', 'Origin', 'Cost', 'Running kg', 'Prev cost', 'Quartile', 'Pct rank'];
+          if (sb) rows = (await liveRpc('shipment_analytics')).map(r => [r.tracking_code, r.origin, fmt(r.base_cost_usd), Number(r.running_kg).toLocaleString(), r.prev_cost == null ? '—' : fmt(r.prev_cost), 'Q' + r.cost_quartile, r.pct_rank + '%']);
+          else {
+            const A = [...S.ships].sort((a, b) => a.id - b.id), by = [...A].sort((a, b) => a.base_cost_usd - b.base_cost_usd), run = {};
+            rows = A.map((x, i) => { run[x.o] = (run[x.o] || 0) + +x.total_weight_kg; const r = by.indexOf(x); return [x.tracking_code, x.o, fmt(x.base_cost_usd), run[x.o].toLocaleString(), i ? fmt(A[i - 1].base_cost_usd) : '—', 'Q' + (Math.floor(r * 4 / A.length) + 1), Math.round(r / Math.max(1, A.length - 1) * 100) + '%'] })
+          }
+        }
+        if (k === 'mv') {
+          S.qSql = `refresh materialized view mv_port_stats;\nselect * from mv_port_stats order by total_kg desc;\n-- totals are precomputed; refresh on demand instead of re-aggregating per request`; head = ['Port', 'Shipments', 'Total kg', 'Declared value'];
+          if (sb) rows = (await liveRpc('port_stats', { p_refresh: true })).map(r => [`${r.port_code} · ${esc(r.name)}`, r.shipments, Number(r.total_kg).toLocaleString(), fmt(r.total_value)]);
+          else {
+            const m = {}; S.ships.forEach(x => [x.o, x.d].forEach(p => { const e = m[p] = m[p] || { n: new Set(), kg: 0, v: 0 }; e.n.add(x.id); e.kg += +x.total_weight_kg; e.v += x.cargo.reduce((a, c) => a + +c.declared_value, 0) }));
+            rows = Object.entries(m).sort((a, b) => b[1].kg - a[1].kg).map(([p, e]) => [`${p} · ${esc(port(p).name)}`, e.n.size, e.kg.toLocaleString(), fmt(e.v)])
+          }
+        }
+        if (k === 'evt') {
+          S.qSql = `select created_at, from_status, to_status, note,\n  created_at - lag(created_at) over (order by created_at, id) as since_previous\nfrom shipment_events where shipment_id = ${s.id}\norder by created_at, id;  -- ${s.tracking_code}`; head = ['When', 'From', 'To', 'Note'];
+          if (sb) rows = (await liveRpc('shipment_timeline', { p_id: s.id })).map(r => [new Date(r.created_at).toLocaleString(), `${r.from_status || '—'} / ${r.from_stage == null ? '—' : STAGES[r.from_stage]}`, `${r.to_status} / ${STAGES[r.to_stage]}`, esc(r.note || '')]);
+          else rows = (DEMO.ev[s.id] || [{ t: 'seed', from: '—', to: st(s), note: 'Shipment created' }]).map(e => [e.t, e.from, e.to, esc(e.note)])
+        }
+        if (k === 'aud') {
+          S.qSql = `select changed_at, op, row_id,\n  old_row->>'status' as old_status, new_row->>'status' as new_status\nfrom audit_log order by id desc limit 20;  -- written by trg_audit_shipments`; head = ['When', 'Op', 'Row', 'Change'];
+          if (sb) rows = (await liveRpc('audit_recent', { p_limit: 20 })).map(r => [new Date(r.changed_at).toLocaleString(), r.op, r.row_id, r.op === 'UPDATE' ? `${r.old_row.status} → ${r.new_row.status} (stage ${r.new_row.stage})` : r.op === 'INSERT' ? 'row inserted' : 'row deleted']);
+          else rows = DEMO.audit.map(a => [a.t, a.op, a.id, esc(a.chg)])
+        }
+        if (k === 'fts') {
+          const term = $('#fts').value.trim(); S.term = term; if (!term) throw new Error('Type a search term first, for example shanghai or chemie.'); const tq = term.replace(/'/g, "''");
+          S.qSql = `select tracking_code, sender, receiver,\n  ts_rank(search, websearch_to_tsquery('simple', '${tq}')) as rank\nfrom shipments\nwhere search @@ websearch_to_tsquery('simple', '${tq}')\norder by rank desc;  -- GIN index on a generated tsvector column`; head = ['Tracking', 'Sender', 'Receiver'];
+          if (sb) rows = (await liveRpc('search_shipments', { p_q: term })).map(r => [r.tracking_code, esc(r.sender), esc(r.receiver)]);
+          else rows = S.ships.filter(x => (x.tracking_code + ' ' + x.sender + ' ' + x.receiver).toLowerCase().includes(term.toLowerCase())).map(r => [r.tracking_code, esc(r.sender), esc(r.receiver)])
+        }
+        if (k === 'exp') {
+          const kind = $('#expk').value; S.expk = kind; S.qSql = `explain (analyze, timing off)\n${EXPQ[kind]};\n-- seq scans are disabled for this demo so the index shows up`; head = ['QUERY PLAN'];
+          if (!sb) throw new Error('EXPLAIN needs the live database. Connect Supabase to run this one.');
+          rows = (await liveRpc('explain_demo', { p_kind: kind })).map(r => [`<span class="mono">${esc(r)}</span>`])
+        }
         S.qOut = tbl(head, rows); logSql('Analytics · ' + k, S.qSql);
       } catch (e) { S.qOut = `<div class="err">${esc(e.message || e)}</div>` }
       render();
@@ -1005,6 +1230,7 @@ create trigger trg_cargo_totals after insert or update or delete
           S.sel = +r.dataset.id; const s = S.ships.find(x => x.id === S.sel);
           logSql('Select shipment', `select s.*, l.leg_order, l.distance_km, o.port_code, d.port_code\nfrom shipments s\njoin shipment_legs l on l.shipment_id = s.id\njoin ports o on o.id = l.origin_port_id\njoin ports d on d.id = l.dest_port_id\nwhere s.tracking_code = '${s.tracking_code}';`); render(); if (innerWidth <= 820) $('.card').scrollIntoView({ behavior: 'smooth', block: 'start' })
         });
+        if ($('#adv')) $('#adv').onclick = advance;
         $('#q').oninput = e => { S.q = e.target.value; render(); const i = $('#q'); i.focus(); i.setSelectionRange(S.q.length, S.q.length) };
         $('#f').onchange = e => { S.f = e.target.value; logSql('Filter by status', `select * from shipments${S.f === 'All' ? '' : `\nwhere status = '${S.f}'`}\norder by id desc;`); render() };
       },
@@ -1028,17 +1254,102 @@ create trigger trg_cargo_totals after insert or update or delete
             const { data, error } = await sb.rpc('create_shipment', { p_sender: sender, p_receiver: recv, p_origin: o, p_dest: d, p_category: cat, p_weight: w, p_metadata: meta, p_base_cost: u });
             if (error) return $('#jErr').textContent = error.message; S.sel = data.id; await load()
           }
-          else { const id = Math.max(0, ...S.ships.map(x => x.id)) + 1; S.ships.unshift(mkShip(id, o, d, 'In Transit', 0, [port(o).lat, port(o).lon], sender, recv, u, { ...meta, category: cat }, [{ hs_code: meta.hs_code || '0000.00', weight_kg: w, declared_value: +meta.declared_value || 0 }])); S.sel = id }
+          else { const id = Math.max(0, ...S.ships.map(x => x.id)) + 1; S.ships.unshift(mkShip(id, o, d, 'In Transit', 0, [port(o).lat, port(o).lon], sender, recv, u, { ...meta, category: cat }, [{ hs_code: meta.hs_code || '0000.00', weight_kg: w, declared_value: +meta.declared_value || 0 }])); S.sel = id; demoLog(S.ships[0], 'INSERT', 'Shipment created') }
           S.q = ''; S.f = 'All'; location.hash = '#/shipments'
         };
       },
       database() {
         document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.tab = b.dataset.t; render() });
         document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => runQ(b.dataset.q));
-        if ($('#rad')) $('#rad').value = S.rad;
+        if ($('#rad')) $('#rad').value = S.rad; if ($('#expk')) $('#expk').value = S.expk || 'spatial';
       }
     };
-    const NAV = [['', 'Home'], ['shipments', 'Shipments'], ['ports', 'Ports'], ['new', 'New shipment'], ['database', 'Database']];
+    /* ===== Visual pages: each one is backed by a SQL join ===== */
+    const SQL_LANES = `select o.port_code as origin, d.port_code as dest,\n  count(*) as shipments, sum(s.total_weight_kg) as total_kg,\n  round(avg(s.base_cost_usd), 2) as avg_cost,\n  count(*) filter (where s.status = 'Customs Hold') as on_hold\nfrom shipment_legs l\njoin shipments s on s.id = l.shipment_id\njoin ports o on o.id = l.origin_port_id\njoin ports d on d.id = l.dest_port_id\ngroup by o.id, d.id\norder by shipments desc;`;
+    const SQL_MF = c => `select case when l.origin_port_id = p.id then 'Outbound' else 'Inbound' end as direction,\n  s.tracking_code, s.status, c.hs_code, c.weight_kg, c.declared_value\nfrom ports p\njoin shipment_legs l on p.id in (l.origin_port_id, l.dest_port_id)\njoin shipments s on s.id = l.shipment_id\njoin cargo_items c on c.leg_id = l.id\nwhere p.port_code = '${c}'\norder by direction desc, s.tracking_code;`;
+    const SQL_CL = `select s.sender, count(distinct s.id) as shipments,\n  sum(c.weight_kg) as total_kg,\n  sum(c.declared_value) as total_value,\n  sum(c.declared_value * c.duty_rate) as total_duty\nfrom shipments s\njoin shipment_legs l on l.shipment_id = s.id\njoin cargo_items c on c.leg_id = l.id\ngroup by s.sender\norder by total_value desc;`;
+    const sqlBox = q => `<details><summary>How this page gets its data · SQL join</summary><pre>${hl(q)}</pre></details>`;
+    const loading = (k, t) => `<section class="wrap"><div class="kick">${k}</div><h1>${t}</h1><p class="mut" style="margin-top:1rem">Loading from the database…</p></section>`;
+
+    async function getLanes() {
+      logSql('Map · lane summary', SQL_LANES);
+      if (sb) return liveRpc('lane_summary');
+      const m = {}; S.ships.forEach(x => { const e = m[x.o + x.d] = m[x.o + x.d] || { origin: x.o, dest: x.d, shipments: 0, total_kg: 0, cost: 0, on_hold: 0 }; e.shipments++; e.total_kg += +x.total_weight_kg; e.cost += +x.base_cost_usd; if (x.status === 'Customs Hold') e.on_hold++ });
+      return Object.values(m).map(e => ({ origin: e.origin, origin_name: port(e.origin).name, o_lat: port(e.origin).lat, o_lon: port(e.origin).lon, dest: e.dest, dest_name: port(e.dest).name, d_lat: port(e.dest).lat, d_lon: port(e.dest).lon, shipments: e.shipments, total_kg: e.total_kg, avg_cost: e.cost / e.shipments, on_hold: e.on_hold })).sort((a, b) => b.shipments - a.shipments);
+    }
+    async function getManifest(c) {
+      logSql('Port desk · ' + c, SQL_MF(c));
+      if (sb) return liveRpc('port_manifest', { p_code: c });
+      const rows = []; S.ships.forEach(x => { if (x.o !== c && x.d !== c) return; x.cargo.forEach(i => rows.push({ direction: x.o === c ? 'Outbound' : 'Inbound', tracking_code: x.tracking_code, status: x.status, counterpart: x.o === c ? x.d : x.o, hs_code: i.hs_code, weight_kg: +i.weight_kg, declared_value: +i.declared_value })) });
+      return rows.sort((a, b) => b.direction.localeCompare(a.direction) || a.tracking_code.localeCompare(b.tracking_code));
+    }
+    async function getClients() {
+      logSql('Clients · ledger', SQL_CL);
+      if (sb) return liveRpc('client_ledger');
+      const m = {}; S.ships.forEach(x => { const e = m[x.sender] = m[x.sender] || { sender: x.sender, shipments: 0, total_kg: 0, total_value: 0, total_duty: 0, last_status: x.status }; e.shipments++; x.cargo.forEach(i => { e.total_kg += +i.weight_kg; e.total_value += +i.declared_value; e.total_duty += +i.declared_value * .06 }) });
+      return Object.values(m).sort((a, b) => b.total_value - a.total_value);
+    }
+    async function need(key, fn, tag, ok) {
+      tag = tag || key; if ((S[key] != null && (!ok || ok(S[key]))) || S._busy === tag) return;
+      S._busy = tag;
+      try { S[key] = await fn() } catch (e) { S.err = 'Could not load data: ' + (e.message || e); S[key] = ok ? { code: S.dk, rows: [] } : [] }
+      S._busy = null; render();
+    }
+
+    const MX = lon => (lon + 180) / 360 * 1000, MY = lat => (72 - lat) * 2.7778;
+    function arc(e) {
+      const dl = e.d_lon - e.o_lon; let dx = e.d_lon, sh = 0; if (dl > 180) { dx -= 360; sh = 1000 } else if (dl < -180) { dx += 360; sh = -1000 }
+      const x1 = MX(e.o_lon), y1 = MY(e.o_lat), x2 = MX(dx), y2 = MY(e.d_lat), h = Math.hypot(x2 - x1, y2 - y1) * .2;
+      return { sh, d: `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${((x1 + x2) / 2).toFixed(1)} ${((y1 + y2) / 2 - h).toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}` }
+    }
+
+    PAGES.map = () => {
+      if (!S.lanes) return loading('Chart', 'Trade lanes');
+      const L = S.lanes, sel = Math.min(S.lane || 0, Math.max(0, L.length - 1)), ends = new Set(L.flatMap(e => [e.origin, e.dest]));
+      const grid = [...Array(13)].map((_, i) => `<line class="grat" x1="${(i * 83.33).toFixed(1)}" y1="0" x2="${(i * 83.33).toFixed(1)}" y2="312"/><text class="glab" x="${(i * 83.33 + 3).toFixed(1)}" y="306">${i * 30 - 180}°</text>`).join('') + [60, 40, 20, 0, -20, -40].map(a => `<line class="grat" x1="0" y1="${MY(a).toFixed(1)}" x2="1000" y2="${MY(a).toFixed(1)}"/><text class="glab" x="4" y="${(MY(a) - 3).toFixed(1)}">${a}°</text>`).join('');
+      const lanes = L.map((e, i) => {
+        const a = arc(e), w = (1.5 + Math.min(4, e.shipments * 1.2)).toFixed(1), c = 'lane' + (i === sel ? ' on' : '');
+        return `<path class="${c}" data-lane="${i}" d="${a.d}" stroke-width="${w}"><title>${e.origin} → ${e.dest}</title></path>` + (a.sh ? `<path class="${c}" data-lane="${i}" d="${a.d}" stroke-width="${w}" transform="translate(${a.sh} 0)"/>` : '')
+      }).join('');
+      const pts = S.ports.map(p => `<rect class="pt" x="${(MX(p.lon) - 3).toFixed(1)}" y="${(MY(p.lat) - 3).toFixed(1)}" width="6" height="6"/>` + (ends.has(p.port_code) ? `<text class="ptl" x="${(MX(p.lon) + (p.lon < 6 ? -8 : 8)).toFixed(1)}" y="${(MY(p.lat) + 4).toFixed(1)}" text-anchor="${p.lon < 6 ? 'end' : 'start'}">${p.port_code}</text>` : '')).join('');
+      const conts = S.ships.filter(x => x.status !== 'Delivered' && x.cur_lat != null).map(x => `<rect class="cont" x="${(MX(x.cur_lon) - 5).toFixed(1)}" y="${(MY(x.cur_lat) - 5).toFixed(1)}" width="10" height="10"><title>${x.tracking_code} · ${x.status}</title></rect>`).join('');
+      const e = L[sel];
+      return `<section class="wrap fade"><div class="kick">Chart</div><h1>Trade lanes</h1>
+  <p class="mut" style="max-width:60ch;margin:1rem 0 1.5rem">Every dashed line is a lane built by joining shipments, legs and both ports. Thicker means more shipments. Green squares are containers at their last reported position.</p>
+  <div class="chart scroll"><svg viewBox="0 0 1000 312" role="img" aria-label="Trade lane map">${grid}${lanes}${pts}${conts}</svg></div>
+  ${e ? `<div class="stats"><div><b>${e.origin} → ${e.dest}</b><span>${esc(e.origin_name)} to ${esc(e.dest_name)}</span></div><div><b>${e.shipments}</b><span>Shipments</span></div><div><b>${(+e.total_kg / 1000).toFixed(1)} t</b><span>Cargo</span></div><div><b>${fmt(e.avg_cost)}</b><span>Average quote</span></div><div><b>${e.on_hold || 0}</b><span>Customs holds</span></div></div>` : ''}
+  <div class="scroll"><table><tr><th>Lane</th><th>Ships</th><th>Tonnes</th><th>Avg quote</th><th>Holds</th></tr>${L.map((x, i) => `<tr class="row ${i === sel ? 'sel' : ''}" data-lane="${i}"><td>${x.origin} → ${x.dest}<br><span class="mut" style="font-size:.75rem">${esc(x.origin_name)} to ${esc(x.dest_name)}</span></td><td>${x.shipments}</td><td>${(+x.total_kg / 1000).toFixed(1)}</td><td>${fmt(x.avg_cost)}</td><td>${x.on_hold || '—'}</td></tr>`).join('')}</table></div>
+  ${sqlBox(SQL_LANES)}</section>`
+    };
+
+    PAGES.desk = () => {
+      if (!S.ports.find(p => p.port_code === S.dk)) S.dk = (S.ports.find(p => p.port_code === 'RTM') || S.ports[0] || {}).port_code;
+      const opts = S.ports.map(p => `<option value="${p.port_code}" ${p.port_code === S.dk ? 'selected' : ''}>${p.port_code} · ${esc(p.name)}</option>`).join('');
+      const top = `<div class="kick">Port desk</div><h1>${esc(port(S.dk).name)}</h1><div class="grid2" style="margin:1.2rem 0 1.5rem"><div><label style="margin-top:0">Choose a port</label><select id="dk">${opts}</select></div><div><label style="margin-top:0">Conditions now</label><div style="font-size:.88rem">${wx(S.dk)}</div></div></div>`;
+      if (!S.mf || S.mf.code !== S.dk) return `<section class="wrap">${top}<p class="mut">Loading manifest…</p></section>`;
+      const R = S.mf.rows, kg = d => R.filter(r => r.direction === d).reduce((a, r) => a + +r.weight_kg, 0), hs = {};
+      R.forEach(r => hs[r.hs_code] = (hs[r.hs_code] || 0) + +r.weight_kg); const hm = Math.max(1, ...Object.values(hs));
+      return `<section class="wrap fade">${top}
+  <div class="board scroll"><table><tr><th>Dir</th><th>Tracking</th><th>Via</th><th>Status</th><th>HS</th><th>Kg</th><th>Value</th></tr>${R.map(r => `<tr><td class="${r.direction === 'Inbound' ? 'bd-in' : 'bd-out'}">${r.direction === 'Inbound' ? '▼ IN' : '▲ OUT'}</td><td>${r.tracking_code}</td><td>${r.counterpart}</td><td class="amber">${String(r.status).toUpperCase()}</td><td>${r.hs_code}</td><td>${(+r.weight_kg).toLocaleString()}</td><td>${fmt(r.declared_value)}</td></tr>`).join('') || '<tr><td colspan="7">No cargo has touched this port yet.</td></tr>'}</table></div>
+  <div class="stats"><div><b>${(kg('Inbound') / 1000).toFixed(1)} t</b><span>Inbound</span></div><div><b>${(kg('Outbound') / 1000).toFixed(1)} t</b><span>Outbound</span></div><div><b>${R.length}</b><span>Cargo lines</span></div></div>
+  ${Object.keys(hs).length ? `<h2 style="margin-bottom:1rem">Weight by HS code</h2>${Object.entries(hs).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div style="display:grid;grid-template-columns:5.5rem 1fr 6rem;gap:.8rem;align-items:center;margin:.5rem 0"><span class="mono" style="font-size:.8rem">${k}</span><div class="hbar"><i style="width:${(v / hm * 100).toFixed(0)}%"></i></div><span class="mut" style="font-size:.8rem;text-align:right">${v.toLocaleString()} kg</span></div>`).join('')}` : ''}
+  ${sqlBox(SQL_MF(S.dk))}</section>`
+    };
+
+    PAGES.clients = () => {
+      if (!S.clients) return loading('Ledger', 'Clients');
+      const C = S.clients, max = Math.max(1, ...C.map(c => +c.total_value)), tv = C.reduce((a, c) => a + +c.total_value, 0), td = C.reduce((a, c) => a + +c.total_duty, 0);
+      return `<section class="wrap fade"><div class="kick">Ledger</div><h1>Clients</h1>
+  <p class="mut" style="max-width:60ch;margin:1rem 0 0">Who ships the most, joined across shipments, legs and cargo lines. Bars show declared value relative to the biggest client.</p>
+  <div class="stats"><div><b>${C.length}</b><span>Clients</span></div><div><b>${fmt(tv)}</b><span>Declared value</span></div><div><b>${fmt(td)}</b><span>Duty owed</span></div></div>
+  ${C.map((c, i) => `<div class="cl"><span class="num">${String(i + 1).padStart(2, '0')}</span><div><h3>${esc(c.sender)}</h3><div class="mut" style="font-size:.78rem">${c.shipments} shipment${c.shipments == 1 ? '' : 's'} · ${(+c.total_kg / 1000).toFixed(1)} t</div></div><div><div class="hbar"><i style="width:${(c.total_value / max * 100).toFixed(0)}%"></i></div><div class="mut" style="font-size:.72rem;margin-top:.3rem">Declared ${fmt(c.total_value)} · duty ${fmt(c.total_duty)}</div></div><span class="tag ${sc(c.last_status)}">${c.last_status}</span></div>`).join('') || '<p class="mut">No clients yet.</p>'}
+  ${sqlBox(SQL_CL)}</section>`
+    };
+
+    BIND.map = () => { need('lanes', getLanes); document.querySelectorAll('[data-lane]').forEach(n => n.onclick = () => { S.lane = +n.dataset.lane; render() }) };
+    BIND.desk = () => { if ($('#dk')) $('#dk').onchange = e => { S.dk = e.target.value; S.mf = null; render() }; need('mf', async () => ({ code: S.dk, rows: await getManifest(S.dk) }), 'mf:' + S.dk, v => v && v.code === S.dk) };
+    BIND.clients = () => need('clients', getClients);
+    const NAV = [['', 'Home'], ['shipments', 'Shipments'], ['map', 'Map'], ['desk', 'Port desk'], ['clients', 'Clients'], ['ports', 'Ports'], ['new', 'Book'], ['database', 'Database']];
     function render() {
       const k = location.hash.replace(/^#\/?/, ''); const key = PAGES[k] ? k : 'home';
       $('#nav').innerHTML = NAV.map(([h, n]) => `<a href="#/${h}" class="${(h || 'home') === key ? 'on' : ''}">${n}</a>`).join('');

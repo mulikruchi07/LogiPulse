@@ -6,6 +6,16 @@ const { SUPABASE_URL, SUPABASE_KEY } = process.env;
 const KEYS = {
   rank_ports_throughput: [],
   hazardous_shipments: [],
+  shipment_analytics: [],
+  lane_summary: [],
+  port_manifest: ['p_code'],
+  client_ledger: [],
+  port_stats: ['p_refresh'],
+  search_shipments: ['p_q'],
+  advance_shipment: ['p_id'],
+  shipment_timeline: ['p_id'],
+  audit_recent: ['p_limit'],
+  explain_demo: ['p_kind'],
   ports_within: ['p_lat', 'p_lon', 'p_radius_km'],
   create_shipment: ['p_sender', 'p_receiver', 'p_origin', 'p_dest', 'p_category', 'p_weight', 'p_metadata', 'p_base_cost'],
 };
@@ -14,6 +24,13 @@ const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const str = (v, max) => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
 
 const CHECK = {
+  port_manifest: (a) => /^[A-Za-z]{3}$/.test(a.p_code || ''),
+  port_stats: (a) => typeof a.p_refresh === 'boolean',
+  search_shipments: (a) => str(a.p_q, 80),
+  advance_shipment: (a) => Number.isInteger(a.p_id) && a.p_id > 0,
+  shipment_timeline: (a) => Number.isInteger(a.p_id) && a.p_id > 0,
+  audit_recent: (a) => Number.isInteger(a.p_limit) && a.p_limit >= 1 && a.p_limit <= 100,
+  explain_demo: (a) => ['spatial', 'jsonb', 'search', 'status'].includes(a.p_kind),
   ports_within: (a) =>
     num(a.p_lat) && Math.abs(a.p_lat) <= 90 && num(a.p_lon) && Math.abs(a.p_lon) <= 180 &&
     num(a.p_radius_km) && a.p_radius_km > 0 && a.p_radius_km <= 20000,
